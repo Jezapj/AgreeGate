@@ -4,6 +4,12 @@ import { searchHN } from "@/lib/hn";
 import { searchX } from "@/lib/x";
 import { getCache, setCache } from "@/lib/cache";
 import { rateLimit } from "@/lib/rateLimit";
+import {
+  parseSession,
+  refreshSession,
+  serializeSession,
+  SESSION_COOKIE,
+} from "@/lib/redditAuth";
 import { SearchResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -55,23 +61,56 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const cacheKey = `${includeX ? "x1" : "x0"}:${query.toLowerCase()}`;
-  const cached = getCache<SearchResponse>(cacheKey);
-  if (cached) {
-    return NextResponse.json(
-      { ...cached, cached: true },
+  // Resolve the (optional) signed-in Reddit session and refresh if expiring.
+  let session = parseSession(req.cookies.get(SESSION_COOKIE)?.value);
+  let refreshedCookie: string | null = null;
+  if (session && session.expiresAt < Date.now() + 30_000) {
+    const refreshed = await refreshSession(session);
+    if (refreshed) {
+      session = refreshed;
+      refreshedCookie = serializeSession(refreshed);
+    } else {
+      session = null; // refresh failed; fall back to app-only
+    }
+  }
+  const userToken = session?.accessToken;
+
+  // Responses carrying a refreshed Set-Cookie must not be shared/cached.
+  const cacheHeader = refreshedCookie
+    ? "no-store"
+    : "public, s-maxage=600, stale-while-revalidate=86400";
+
+  function finalize(body: SearchResponse, xCache: "HIT" | "MISS") {
+    const res = NextResponse.json(
+      { ...body, cached: xCache === "HIT" },
       {
         headers: {
           "Cache-Control":
-            "public, s-maxage=600, stale-while-revalidate=86400",
-          "X-Cache": "HIT",
+            body.results.length > 0 || xCache === "HIT" ? cacheHeader : "no-store",
+          "X-Cache": xCache,
         },
       }
     );
+    if (refreshedCookie) {
+      res.cookies.set(SESSION_COOKIE, refreshedCookie, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+    return res;
+  }
+
+  const cacheKey = `${includeX ? "x1" : "x0"}:${query.toLowerCase()}`;
+  const cached = getCache<SearchResponse>(cacheKey);
+  if (cached) {
+    return finalize(cached, "HIT");
   }
 
   const [reddit, hn, x] = await Promise.all([
-    searchReddit(query),
+    searchReddit(query, { userToken }),
     searchHN(query),
     includeX
       ? searchX(query)
@@ -96,13 +135,5 @@ export async function GET(req: NextRequest) {
     setCache(cacheKey, payload, CACHE_TTL_MS);
   }
 
-  return NextResponse.json(payload, {
-    headers: {
-      "Cache-Control":
-        results.length > 0
-          ? "public, s-maxage=600, stale-while-revalidate=86400"
-          : "no-store",
-      "X-Cache": "MISS",
-    },
-  });
+  return finalize(payload, "MISS");
 }

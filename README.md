@@ -5,7 +5,7 @@
 You ask a question; AgreeGate searches live discussions and returns genuine human responses, linking back to the original threads.
 
 - **Hacker News** — works out of the box, no setup. Free public API; returns real human comments.
-- **Reddit** — the primary source. Finds the most relevant threads, then surfaces their top human comments. Reddit blocks anonymous access, so this needs free API credentials (2-minute setup below).
+- **Reddit** — the primary source. Finds the most relevant threads, then surfaces their top human comments. Reddit blocks anonymous access, so this needs free API credentials (2-minute setup below). Anyone can search anonymously (app-only token); users can *optionally* **Connect Reddit** to search on their own per-user rate limit.
 - **X / Twitter** — secondary and *off by default*. X carries heavy bot noise, so it's only included when you provide an API token, and posts are filtered through bot/spam heuristics.
 
 ## Principles
@@ -36,15 +36,30 @@ Then open [http://localhost:3000](http://localhost:3000). Hacker News results wo
 Reddit blocks anonymous API access, so you need free credentials:
 
 1. Go to [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) → **create another app...**
-2. Choose type **script**, set redirect URI to `http://localhost:3000`.
+2. Choose type **script**, set redirect URI to `http://localhost:3000/api/auth/reddit/callback`.
 3. Copy `.env.example` to `.env.local` and set the client id (shown under the app name) and secret:
 
 ```bash
 REDDIT_CLIENT_ID=your_client_id
 REDDIT_CLIENT_SECRET=your_client_secret
+SESSION_SECRET=run `openssl rand -hex 32` and paste here
 ```
 
 4. Restart `npm run dev`. Reddit results now appear alongside Hacker News.
+
+#### Optional: "Connect Reddit" (per-user rate limits)
+
+With credentials set, a **Connect Reddit** button appears. Anonymous search uses
+the app's shared 100 req/min budget; signing in lets each user search on their
+**own** 100 req/min budget — the cleanest way to scale.
+
+- It uses Reddit's Authorization Code OAuth flow (scopes `identity read`), stores
+  the token in an **encrypted, httpOnly cookie**, and auto-refreshes it.
+- Reddit allows **one redirect URI per app**, so it must match the environment.
+  Locally that's `http://localhost:3000/api/auth/reddit/callback`; in production
+  set it to `https://your-domain/api/auth/reddit/callback` (update the Reddit app,
+  or use a separate app per environment). You can override detection with
+  `REDDIT_REDIRECT_URI`.
 
 ### Enabling X (optional)
 

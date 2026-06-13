@@ -112,11 +112,13 @@ async function fetchTopComments(
 
 export async function searchReddit(
   query: string,
-  opts: { posts?: number; answersPerPost?: number } = {}
+  opts: { posts?: number; answersPerPost?: number; userToken?: string } = {}
 ): Promise<{ results: SearchResult[]; status: SourceStatus }> {
-  const { posts = 6, answersPerPost = 3 } = opts;
+  const { posts = 6, answersPerPost = 3, userToken } = opts;
 
-  const token = await getRedditToken();
+  // Prefer the signed-in user's token (their own per-user rate limit);
+  // otherwise fall back to this app's application-only token.
+  const token = userToken ?? (await getRedditToken());
   const base = token ? "https://oauth.reddit.com" : "https://www.reddit.com";
   const headers: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` }

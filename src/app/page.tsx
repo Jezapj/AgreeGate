@@ -5,6 +5,7 @@ import Image from "next/image";
 import styles from "./page.module.css";
 import SearchBar from "@/components/SearchBar";
 import ResultCard from "@/components/ResultCard";
+import ConnectReddit from "@/components/ConnectReddit";
 import { SearchResponse } from "@/lib/types";
 
 const EXAMPLES = [
@@ -20,6 +21,7 @@ export default function Home() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -47,19 +49,42 @@ export default function Home() {
     }
   }, []);
 
-  // Restore a query from the URL on first load (e.g. shared link).
+  // Restore a query from the URL on first load (e.g. shared link),
+  // and surface the result of a Reddit connect redirect.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const connect = params.get("connect");
+    if (connect) {
+      setNotice(
+        connect === "success"
+          ? "Reddit connected — you're now searching on your own rate limit."
+          : "Couldn't connect Reddit. Please try again."
+      );
+      params.delete("connect");
+      const rest = params.toString();
+      window.history.replaceState(null, "", rest ? `/?${rest}` : "/");
+      setTimeout(() => setNotice(null), 6000);
+    }
     const q = params.get("q");
     if (q) runSearch(q);
   }, [runSearch]);
 
   const hasSearched = activeQuery.length > 0;
 
+  const toastEl = notice ? (
+    <div className={styles.toast} role="status">
+      {notice}
+    </div>
+  ) : null;
+
   if (!hasSearched) {
     return (
       <main className={styles.page}>
+        {toastEl}
         <div className={styles.home}>
+          <div className={styles.homeTopRight}>
+            <ConnectReddit />
+          </div>
           <div className={styles.hero}>
             <Image
               className={styles.logoMark}
@@ -113,6 +138,7 @@ export default function Home() {
 
   return (
     <main className={styles.resultsPage}>
+      {toastEl}
       <header className={styles.topbar}>
         <a
           className={styles.topbarBrand}
@@ -143,6 +169,7 @@ export default function Home() {
             initialValue={query}
           />
         </div>
+        <ConnectReddit />
       </header>
 
       <div className={styles.results}>
