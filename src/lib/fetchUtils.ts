@@ -1,6 +1,10 @@
 export const USER_AGENT =
   "AgreeGate/0.1 (real-human-answers search; +https://agreegate.local)";
 
+// Some hosts (e.g. Bluesky's AppView) reject non-browser user agents.
+export const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 export async function fetchJson<T>(
   url: string,
   opts: { headers?: Record<string, string>; timeoutMs?: number } = {}

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchReddit } from "@/lib/reddit";
 import { searchHN } from "@/lib/hn";
 import { searchX } from "@/lib/x";
+import { searchBluesky } from "@/lib/bluesky";
+import { searchStackExchange } from "@/lib/stackexchange";
 import { getCache, setCache } from "@/lib/cache";
 import { rateLimit } from "@/lib/rateLimit";
 import {
@@ -109,9 +111,11 @@ export async function GET(req: NextRequest) {
     return finalize(cached, "HIT");
   }
 
-  const [reddit, hn, x] = await Promise.all([
-    searchReddit(query, { userToken }),
+  const [bluesky, se, hn, reddit, x] = await Promise.all([
+    searchBluesky(query),
+    searchStackExchange(query),
     searchHN(query),
+    searchReddit(query, { userToken }),
     includeX
       ? searchX(query)
       : Promise.resolve({
@@ -120,14 +124,27 @@ export async function GET(req: NextRequest) {
         }),
   ]);
 
-  // Reddit & HN are the primary human sources; X is secondary (bot noise).
-  const results = [...reddit.results, ...hn.results, ...x.results];
+  // Broad, free, all-topics sources lead (Bluesky + Stack Exchange + HN);
+  // Reddit/X are optional and appended when available.
+  const results = [
+    ...bluesky.results,
+    ...se.results,
+    ...hn.results,
+    ...reddit.results,
+    ...x.results,
+  ];
 
   const payload: SearchResponse = {
     query,
     tookMs: Date.now() - start,
     results,
-    sources: { reddit: reddit.status, hn: hn.status, x: x.status },
+    sources: {
+      bluesky: bluesky.status,
+      se: se.status,
+      hn: hn.status,
+      reddit: reddit.status,
+      x: x.status,
+    },
   };
 
   // Only cache responses that actually returned something useful.

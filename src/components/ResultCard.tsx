@@ -15,13 +15,18 @@ export default function ResultCard({
   result: SearchResult;
   index: number;
 }) {
-  const isX = result.source === "x";
-  const showUpvote = result.source === "reddit" || result.source === "hn";
+  const isSocial = result.source === "x" || result.source === "bluesky";
+  const showUpvote =
+    result.source === "reddit" ||
+    result.source === "hn" ||
+    result.source === "se";
   const authorPrefix = result.source === "reddit" ? "u/" : "";
   const badgeMeta: Record<string, { label: string; cls: string }> = {
     reddit: { label: "Reddit", cls: styles.badgeReddit },
     hn: { label: "Hacker News", cls: styles.badgeHn },
     x: { label: "X", cls: styles.badgeX },
+    bluesky: { label: "Bluesky", cls: styles.badgeBsky },
+    se: { label: "Stack Exchange", cls: styles.badgeSe },
   };
   const badge = badgeMeta[result.source] ?? badgeMeta.reddit;
 
@@ -39,10 +44,10 @@ export default function ResultCard({
             target="_blank"
             rel="noopener noreferrer"
           >
-            {result.title}
+            {isSocial ? result.subtitle ?? "View post" : result.title}
           </a>
           <div className={styles.cardSub}>
-            {result.subtitle && (
+            {!isSocial && result.subtitle && (
               <span className={styles.src}>{result.subtitle}</span>
             )}
             <span className={styles.statIcon}>
@@ -66,8 +71,8 @@ export default function ResultCard({
 
       {result.selfText && <p className={styles.selfText}>{result.selfText}</p>}
 
-      {/* For X, the tweet text itself is the human answer. */}
-      {isX && <p className={styles.tweetBody}>{result.title}</p>}
+      {/* For social posts (X, Bluesky), the post text is the human response. */}
+      {isSocial && <p className={styles.tweetBody}>{result.title}</p>}
 
       {result.answers.length > 0 && (
         <div className={styles.answers}>

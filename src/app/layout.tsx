@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     title: "AgreeGate — Answers from real people",
     description:
       "Search real human answers from Reddit and X. No sponsored results. No AI summaries.",
-    images: ["/logo-green.png"],
+    images: ["/logo-dark.png"],
   },
 };
 

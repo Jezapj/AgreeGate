@@ -66,7 +66,7 @@ export async function searchX(
         ok: false,
         count: 0,
         note:
-          "X is off by default. Add an X_BEARER_TOKEN to include human posts from X (filtered for bots).",
+          "X is optional and currently off — its API now requires a paid plan to search. Add an X_BEARER_TOKEN to enable it.",
       },
     };
   }

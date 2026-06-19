@@ -2,7 +2,7 @@ import { Answer, SearchResult, SourceStatus } from "./types";
 import { USER_AGENT, decodeEntities, fetchJson } from "./fetchUtils";
 
 const SETUP_NOTE =
-  "Reddit needs free API credentials (Reddit blocks anonymous access). Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to .env.local — see the README.";
+  "Reddit is optional and currently off — its self-serve API signup closed in 2025, so it needs approved credentials (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET).";
 
 let cachedToken: { token: string; expires: number } | null = null;
 

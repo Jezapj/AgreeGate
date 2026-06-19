@@ -392,6 +392,16 @@
   color: var(--x);
   border: 1px solid rgba(215, 219, 215, 0.25);
 }
+.badgeBsky {
+  background: rgba(16, 131, 254, 0.12);
+  color: #4ea3ff;
+  border: 1px solid rgba(16, 131, 254, 0.4);
+}
+.badgeSe {
+  background: rgba(244, 128, 36, 0.1);
+  color: #e6b873;
+  border: 1px solid rgba(244, 128, 36, 0.32);
+}
 
 .cardTitleWrap {
   flex: 1;

@@ -9,11 +9,20 @@ import ConnectReddit from "@/components/ConnectReddit";
 import { SearchResponse } from "@/lib/types";
 
 const EXAMPLES = [
-  "best budget mechanical keyboard",
-  "is the new M4 macbook worth it",
-  "how to fix sleep schedule",
-  "honest opinions on standing desks",
+  "best way to cook salmon",
+  "tips for visiting japan",
+  "how to fix a leaky faucet",
+  "is the carnivore diet actually healthy",
 ];
+
+const SOURCE_LABELS: Record<string, string> = {
+  bluesky: "Bluesky",
+  se: "Stack Exchange",
+  hn: "Hacker News",
+  reddit: "Reddit",
+  x: "X",
+};
+const SOURCE_ORDER = ["bluesky", "se", "hn", "reddit", "x"];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -88,7 +97,7 @@ export default function Home() {
           <div className={styles.hero}>
             <Image
               className={styles.logoMark}
-              src="/logo-green.png"
+              src="/logo-dark.png"
               alt="AgreeGate"
               width={104}
               height={104}
@@ -99,8 +108,9 @@ export default function Home() {
               <span className={styles.gate}>Gate</span>
             </h1>
             <p className={styles.tagline}>
-              Answers from <b>real people</b> — pulled straight from Reddit,
-              Hacker News &amp; X. No sponsored results. No AI summaries. No bots.
+              Answers from <b>real people</b> across every topic — pulled from
+              Bluesky, Stack Exchange &amp; Hacker News. No sponsored results. No
+              AI summaries. No bots.
             </p>
 
             <SearchBar onSearch={runSearch} loading={loading} autoFocus />
@@ -153,7 +163,7 @@ export default function Home() {
         >
           <Image
             className={styles.topbarLogo}
-            src="/logo-green.png"
+            src="/logo-dark.png"
             alt="AgreeGate"
             width={34}
             height={34}
@@ -182,23 +192,21 @@ export default function Home() {
         {!loading && data && (
           <>
             <div className={styles.metaRow}>
-              <SourcePill
-                label="Reddit"
-                ok={data.sources.reddit.ok}
-                count={data.sources.reddit.count}
-              />
-              <SourcePill
-                label="Hacker News"
-                ok={data.sources.hn.ok}
-                count={data.sources.hn.count}
-              />
-              <SourcePill
-                label="X"
-                ok={data.sources.x.ok}
-                count={data.sources.x.count}
-              />
+              {SOURCE_ORDER.filter((key) => data.sources[key as keyof typeof data.sources]).map(
+                (key) => {
+                  const s = data.sources[key as keyof typeof data.sources]!;
+                  return (
+                    <SourcePill
+                      key={key}
+                      label={SOURCE_LABELS[key] ?? key}
+                      ok={s.ok}
+                      count={s.count}
+                    />
+                  );
+                }
+              )}
               <span>
-                {data.results.length} thread
+                {data.results.length} result
                 {data.results.length === 1 ? "" : "s"} · {data.tookMs}ms
               </span>
             </div>
@@ -234,10 +242,10 @@ export default function Home() {
 
 function sourceNotes(data: SearchResponse): string[] {
   const notes: string[] = [];
-  if (!data.sources.reddit.ok && data.sources.reddit.note)
-    notes.push(data.sources.reddit.note);
-  if (!data.sources.x.ok && data.sources.x.note)
-    notes.push(data.sources.x.note);
+  for (const key of SOURCE_ORDER) {
+    const s = data.sources[key as keyof typeof data.sources];
+    if (s && !s.ok && s.note) notes.push(s.note);
+  }
   return notes;
 }
 
@@ -264,7 +272,7 @@ function LoadingState() {
     <div>
       <div className={styles.loader}>
         <div className={styles.spinner} />
-        <span>Asking real people across Reddit, Hacker News &amp; X…</span>
+        <span>Asking real people across Bluesky, Stack Exchange &amp; more…</span>
       </div>
       {[0, 1, 2].map((i) => (
         <div className={styles.skeleton} key={i} />
@@ -277,7 +285,7 @@ function Footer() {
   return (
     <footer className={styles.footer}>
       <b>AgreeGate</b> — real answers from real humans. Every result links back
-      to the original post on Reddit, Hacker News &amp; X.
+      to the original post on Bluesky, Stack Exchange, Hacker News &amp; more.
     </footer>
   );
 }

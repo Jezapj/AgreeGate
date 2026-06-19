@@ -2,11 +2,18 @@
 
 **A search engine for real human answers.** No sponsored results. No AI summaries. No bots — just what actual people said.
 
-You ask a question; AgreeGate searches live discussions and returns genuine human responses, linking back to the original threads.
+You ask a question; AgreeGate searches live discussions and returns genuine human responses, linking back to the originals. It works across **all topics** (cooking, travel, finance, fitness, DIY, gaming, tech…), not just tech.
 
-- **Hacker News** — works out of the box, no setup. Free public API; returns real human comments.
-- **Reddit** — the primary source. Finds the most relevant threads, then surfaces their top human comments. Reddit blocks anonymous access, so this needs free API credentials (2-minute setup below). Anyone can search anonymously (app-only token); users can *optionally* **Connect Reddit** to search on their own per-user rate limit.
-- **X / Twitter** — secondary and *off by default*. X carries heavy bot noise, so it's only included when you provide an API token, and posts are filtered through bot/spam heuristics.
+**Free, zero-setup sources (on by default):**
+
+- **Bluesky** — broad, all-topics social posts from real people via the open, no-auth AppView API. The "what are people actually saying" source, with far less bot spam than X.
+- **Stack Exchange** — real human Q&A across a diverse slice of the network (Stack Overflow, Seasoned Advice/cooking, Travel, Personal Finance, Fitness, Home Improvement, Arqade/gaming, Super User). Free API, no approval.
+- **Hacker News** — free public API; real human comments.
+
+**Optional sources (off unless configured):**
+
+- **Reddit** — Reddit closed self-serve API signup in late 2025 (the "Responsible Builder Policy"); new access requires approval. If you have approved or legacy credentials, AgreeGate lights up Reddit results plus an optional **Connect Reddit** login (per-user rate limits). The integration is built and ready.
+- **X / Twitter** — X's API now requires a **paid plan** to search, and it's the most bot-heavy source, so it's off by default. Add a Bearer Token to enable it (bot-filtered).
 
 ## Principles
 
@@ -29,15 +36,19 @@ npm install
 npm run dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000). Hacker News results work immediately.
+Then open [http://localhost:3000](http://localhost:3000). Bluesky, Stack Exchange, and Hacker News results work immediately — no keys required.
 
-### Enabling Reddit (recommended — the primary source)
+### Optional: higher Stack Exchange quota
 
-Reddit blocks anonymous API access, so you need free credentials:
+Stack Exchange works with no key (~300 requests/day per IP). For more, register a
+free, no-approval key at [stackapps.com](https://stackapps.com/apps/oauth/register)
+and set `STACKEXCHANGE_KEY` in `.env.local` (raises the quota to ~10k/day).
 
-1. Go to [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) → **create another app...**
-2. Choose type **script**, set redirect URI to `http://localhost:3000/api/auth/reddit/callback`.
-3. Copy `.env.example` to `.env.local` and set the client id (shown under the app name) and secret:
+### Optional: enabling Reddit
+
+Reddit closed self-serve API signup in late 2025, so new credentials require
+approval via Reddit's Developer Support form. If you have approved (or legacy
+pre-2025) credentials, add them to `.env.local`:
 
 ```bash
 REDDIT_CLIENT_ID=your_client_id
@@ -45,9 +56,9 @@ REDDIT_CLIENT_SECRET=your_client_secret
 SESSION_SECRET=run `openssl rand -hex 32` and paste here
 ```
 
-4. Restart `npm run dev`. Reddit results now appear alongside Hacker News.
+Restart `npm run dev` and Reddit results (plus the **Connect Reddit** button) appear.
 
-#### Optional: "Connect Reddit" (per-user rate limits)
+#### "Connect Reddit" (per-user rate limits)
 
 With credentials set, a **Connect Reddit** button appears. Anonymous search uses
 the app's shared 100 req/min budget; signing in lets each user search on their
@@ -75,9 +86,10 @@ AgreeGate is a standard Next.js app and deploys to [Vercel](https://vercel.com) 
 
 1. Push this folder to a Git repo (GitHub/GitLab/Bitbucket).
 2. In Vercel, **Add New → Project** and import the repo (framework auto-detects as Next.js).
-3. Add environment variables in **Project → Settings → Environment Variables** (do **not** commit `.env.local`):
-   - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` — for Reddit results
-   - `X_BEARER_TOKEN` — optional, for X results
+3. Add environment variables in **Project → Settings → Environment Variables** (do **not** commit `.env.local`) — all optional, since the default sources need none:
+   - `STACKEXCHANGE_KEY` — higher Stack Exchange quota
+   - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `SESSION_SECRET` — for Reddit results + login
+   - `X_BEARER_TOKEN` — for X results (paid X plan required)
 4. Deploy. That's it.
 
 Or from the CLI:
@@ -97,10 +109,12 @@ vercel --prod     # production deploy
 
 ## How it works
 
-1. `GET /api/search?q=...` runs Reddit and X lookups in parallel.
-2. **Reddit:** searches threads by relevance, then fetches each thread's top comments, dropping bots (`AutoModerator`, `*bot`), deleted/removed content, and low-effort one-liners.
-3. **X:** queries recent tweets (no retweets/replies), then scores each for bot/spam signals (link/hashtag spam, tiny accounts, giveaway language) and keeps only clean, human-looking posts.
-4. Results are returned with source attribution and ranked by engagement. Reddit always comes first.
+1. `GET /api/search?q=...` runs all enabled sources in parallel.
+2. **Bluesky:** searches public posts via the open AppView, then scores each for bot/spam signals (link/hashtag spam, giveaway language, bot-like handles, too-short text) and keeps only clean, human-looking posts.
+3. **Stack Exchange:** searches a diverse set of network sites in parallel, picks the top-scored answered questions, and fetches their top-voted human answers.
+4. **Hacker News:** searches stories (with `optionalWords` for recall), then pulls each story's top human comments.
+5. **Reddit / X (optional):** when credentials are present, Reddit threads + top comments and bot-filtered X posts are added.
+6. Results are returned with source attribution and ranked by engagement. Bot/deleted/low-effort content is dropped throughout.
 
 ## Project structure
 
@@ -112,21 +126,22 @@ src/
     page.module.css     # the AgreeGate theme
     globals.css         # base styles / palette tokens
     api/search/route.ts # combined search endpoint
+    api/auth/...        # optional Reddit OAuth (login/callback/logout/session)
   components/
-    SearchBar.tsx
-    ResultCard.tsx
-    icons.tsx
+    SearchBar.tsx  ResultCard.tsx  ConnectReddit.tsx  icons.tsx
   lib/
-    reddit.ts           # Reddit source + bot filtering
-    x.ts                # X source + bot heuristics
-    types.ts
-    format.ts
-    fetchUtils.ts
+    bluesky.ts          # Bluesky source + bot heuristics
+    stackexchange.ts    # Stack Exchange multi-site source
+    hn.ts               # Hacker News source
+    reddit.ts           # Reddit source (optional) + bot filtering
+    x.ts                # X source (optional) + bot heuristics
+    cache.ts  rateLimit.ts  crypto.ts  redditAuth.ts
+    types.ts  format.ts  fetchUtils.ts
 public/
   logo-green.png / logo-dark.png / icon.png
 ```
 
 ## Notes
 
-- Reddit's public endpoints are rate-limited per IP. If a search returns nothing, wait a moment and retry.
-- This is an MVP; nothing is persisted and there's no auth.
+- Free APIs are rate-limited per IP. If a search returns little, wait a moment and retry, or add a `STACKEXCHANGE_KEY`.
+- This is an MVP; nothing is persisted (aside from the optional Reddit session cookie).

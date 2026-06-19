@@ -1,4 +1,4 @@
-export type Source = "reddit" | "hn" | "x";
+export type Source = "reddit" | "hn" | "x" | "bluesky" | "se";
 
 export interface Answer {
   id: string;
@@ -33,9 +33,5 @@ export interface SearchResponse {
   tookMs: number;
   cached?: boolean;
   results: SearchResult[];
-  sources: {
-    reddit: SourceStatus;
-    hn: SourceStatus;
-    x: SourceStatus;
-  };
+  sources: Partial<Record<Source, SourceStatus>>;
 }
