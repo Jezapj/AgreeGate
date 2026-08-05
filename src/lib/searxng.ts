@@ -1,4 +1,4 @@
-import { fetchJson } from "./fetchUtils";
+import { BROWSER_UA, decodeEntities, fetchJson, stripHtml } from "./fetchUtils";
 
 export interface SearxHit {
   url: string;
@@ -20,7 +20,62 @@ function baseUrl(): string {
   return raw.replace(/\/+$/, "");
 }
 
-/** Run a web search via your self-hosted SearXNG instance (JSON API). */
+/** Parse SearXNG HTML results (fallback when JSON API is blocked). */
+function parseSearxHtml(html: string): SearxHit[] {
+  const results: SearxHit[] = [];
+  const articleRe =
+    /<article[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = articleRe.exec(html)) !== null) {
+    const block = match[1];
+    const titleMatch = block.match(
+      /<h3>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
+    );
+    if (!titleMatch) continue;
+
+    const url = decodeEntities(titleMatch[1].trim());
+    const title = stripHtml(titleMatch[2]);
+    if (!url || !title) continue;
+
+    const contentMatch = block.match(/<p class="content">\s*([\s\S]*?)\s*<\/p>/i);
+    const content = contentMatch ? stripHtml(contentMatch[1]) : undefined;
+
+    results.push({ url, title, content });
+  }
+
+  return results;
+}
+
+async function fetchSearxHtml(query: string): Promise<SearxHit[]> {
+  const base = baseUrl();
+  const params = new URLSearchParams({
+    q: query,
+    categories: "general",
+    language: "en",
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch(`${base}/search?${params.toString()}`, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml",
+        Referer: `${base}/`,
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    return parseSearxHtml(await res.text());
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Run a web search via your self-hosted SearXNG instance. */
 export async function searxSearch(
   query: string,
   opts: { limit?: number } = {}
@@ -36,13 +91,20 @@ export async function searxSearch(
     language: "en",
   });
 
+  // Prefer JSON when allowed; many instances block it (403) via bot detection.
   try {
     const json = await fetchJson<SearxResponse>(
       `${base}/search?${params.toString()}`,
-      { timeoutMs: 12_000 }
+      {
+        timeoutMs: 12_000,
+        headers: { "User-Agent": BROWSER_UA, Referer: `${base}/` },
+      }
     );
-    return (json.results ?? []).slice(0, limit);
+    const hits = json.results ?? [];
+    if (hits.length > 0) return hits.slice(0, limit);
   } catch {
-    return [];
+    /* fall through to HTML */
   }
+
+  return (await fetchSearxHtml(query)).slice(0, limit);
 }

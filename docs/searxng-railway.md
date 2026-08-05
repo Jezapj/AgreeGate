@@ -57,6 +57,7 @@ You should get JSON with `results[]` containing `url`, `title`, and `content`.
 | Problem | Fix |
 |---------|-----|
 | Empty Reddit/X results | Check SearXNG logs; upstream engines may be rate-limited. Try enabling Google/Bing in SearXNG settings. |
+| `403` on `format=json` | Normal on many instances — AgreeGate automatically falls back to HTML parsing. To allow JSON, set `server.limiter: false` in SearXNG settings. |
 | `403` from SearXNG | Ensure `SEARXNG_BASE_URL` matches your public Railway URL exactly. |
 | Slow searches | SearXNG aggregates multiple engines; 3–8s is normal. AgreeGate caches results for 10 minutes. |
 | AgreeGate can't reach SearXNG | If AgreeGate is on Vercel, SearXNG must be publicly reachable (Railway public domain). |
