@@ -17,12 +17,13 @@ const EXAMPLES = [
 
 const SOURCE_LABELS: Record<string, string> = {
   bluesky: "Bluesky",
+  lemmy: "Lemmy",
   se: "Stack Exchange",
   hn: "Hacker News",
   reddit: "Reddit",
   x: "X",
 };
-const SOURCE_ORDER = ["bluesky", "se", "hn", "reddit", "x"];
+const SOURCE_ORDER = ["bluesky", "lemmy", "se", "hn", "reddit", "x"];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -109,8 +110,8 @@ export default function Home() {
             </h1>
             <p className={styles.tagline}>
               Answers from <b>real people</b> across every topic — pulled from
-              Bluesky, Stack Exchange &amp; Hacker News. No sponsored results. No
-              AI summaries. No bots.
+              Bluesky, Lemmy, Stack Exchange &amp; Hacker News. No sponsored
+              results. No AI summaries. No bots.
             </p>
 
             <SearchBar onSearch={runSearch} loading={loading} autoFocus />
@@ -285,7 +286,7 @@ function Footer() {
   return (
     <footer className={styles.footer}>
       <b>AgreeGate</b> — real answers from real humans. Every result links back
-      to the original post on Bluesky, Stack Exchange, Hacker News &amp; more.
+      to the original post on Bluesky, Lemmy, Stack Exchange, Hacker News &amp; more.
     </footer>
   );
 }

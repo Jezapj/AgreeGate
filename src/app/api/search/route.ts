@@ -4,6 +4,7 @@ import { searchHN } from "@/lib/hn";
 import { searchX } from "@/lib/x";
 import { searchBluesky } from "@/lib/bluesky";
 import { searchStackExchange } from "@/lib/stackexchange";
+import { searchLemmy } from "@/lib/lemmy";
 import { getCache, setCache } from "@/lib/cache";
 import { rateLimit } from "@/lib/rateLimit";
 import {
@@ -111,8 +112,9 @@ export async function GET(req: NextRequest) {
     return finalize(cached, "HIT");
   }
 
-  const [bluesky, se, hn, reddit, x] = await Promise.all([
+  const [bluesky, lemmy, se, hn, reddit, x] = await Promise.all([
     searchBluesky(query),
+    searchLemmy(query),
     searchStackExchange(query),
     searchHN(query),
     searchReddit(query, { userToken }),
@@ -124,10 +126,11 @@ export async function GET(req: NextRequest) {
         }),
   ]);
 
-  // Broad, free, all-topics sources lead (Bluesky + Stack Exchange + HN);
+  // Broad, free, all-topics sources lead (Bluesky + Lemmy + Stack Exchange + HN);
   // Reddit/X are optional and appended when available.
   const results = [
     ...bluesky.results,
+    ...lemmy.results,
     ...se.results,
     ...hn.results,
     ...reddit.results,
@@ -140,6 +143,7 @@ export async function GET(req: NextRequest) {
     results,
     sources: {
       bluesky: bluesky.status,
+      lemmy: lemmy.status,
       se: se.status,
       hn: hn.status,
       reddit: reddit.status,

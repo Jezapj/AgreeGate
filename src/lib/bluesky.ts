@@ -1,5 +1,6 @@
 import { SearchResult, SourceStatus } from "./types";
 import { BROWSER_UA, fetchJson } from "./fetchUtils";
+import { keywordize } from "./query";
 
 interface BskyAuthor {
   did: string;
@@ -51,9 +52,11 @@ export async function searchBluesky(
 ): Promise<{ results: SearchResult[]; status: SourceStatus }> {
   const { limit = 8 } = opts;
   try {
+    // Keyword form greatly improves recall for natural-language questions.
+    const q = keywordize(query).query;
     const url =
       `https://api.bsky.app/xrpc/app.bsky.feed.searchPosts` +
-      `?q=${encodeURIComponent(query)}&limit=${Math.min(limit * 3, 40)}&sort=top`;
+      `?q=${encodeURIComponent(q)}&limit=${Math.min(limit * 3, 40)}&sort=top`;
     const json = await fetchJson<BskySearchResponse>(url, {
       timeoutMs: 8000,
       headers: { "User-Agent": BROWSER_UA },

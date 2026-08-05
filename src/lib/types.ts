@@ -1,4 +1,4 @@
-export type Source = "reddit" | "hn" | "x" | "bluesky" | "se";
+export type Source = "reddit" | "hn" | "x" | "bluesky" | "se" | "lemmy";
 
 export interface Answer {
   id: string;

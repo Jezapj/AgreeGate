@@ -7,8 +7,18 @@ You ask a question; AgreeGate searches live discussions and returns genuine huma
 **Free, zero-setup sources (on by default):**
 
 - **Bluesky** — broad, all-topics social posts from real people via the open, no-auth AppView API. The "what are people actually saying" source, with far less bot spam than X.
+- **Lemmy** — the open, federated Reddit alternative. Free, no-auth API; real human threads + top comments across communities.
 - **Stack Exchange** — real human Q&A across a diverse slice of the network (Stack Overflow, Seasoned Advice/cooking, Travel, Personal Finance, Fitness, Home Improvement, Arqade/gaming, Super User). Free API, no approval.
 - **Hacker News** — free public API; real human comments.
+
+> **Recall:** natural-language questions are reduced to keywords before hitting
+> keyword-matching APIs (e.g. "how to clean matted hair" → "clean matted hair"),
+> which dramatically improves results for non-tech, everyday questions.
+
+**Not supported (and why):**
+
+- **Reddit / Quora** — closed their data: Reddit requires approved API access; Quora has no API and blocks crawling (ToS-prohibited). Reddit is wired up for if you get approved credentials.
+- **Mastodon** — its full-text post search requires authentication (public unauthenticated search returns nothing), so it isn't viable as a free, zero-setup source.
 
 **Optional sources (off unless configured):**
 
@@ -109,12 +119,13 @@ vercel --prod     # production deploy
 
 ## How it works
 
-1. `GET /api/search?q=...` runs all enabled sources in parallel.
+1. `GET /api/search?q=...` runs all enabled sources in parallel. Natural-language queries are reduced to keywords for keyword-matching APIs (Bluesky, Lemmy).
 2. **Bluesky:** searches public posts via the open AppView, then scores each for bot/spam signals (link/hashtag spam, giveaway language, bot-like handles, too-short text) and keeps only clean, human-looking posts.
-3. **Stack Exchange:** searches a diverse set of network sites in parallel, picks the top-scored answered questions, and fetches their top-voted human answers.
-4. **Hacker News:** searches stories (with `optionalWords` for recall), then pulls each story's top human comments.
-5. **Reddit / X (optional):** when credentials are present, Reddit threads + top comments and bot-filtered X posts are added.
-6. Results are returned with source attribution and ranked by engagement. Bot/deleted/low-effort content is dropped throughout.
+3. **Lemmy:** searches posts on a federated instance, filters to query-relevant ones, and fetches each thread's top human comments (skipping bot accounts / deleted content).
+4. **Stack Exchange:** searches a diverse set of network sites in parallel, picks the top-scored answered questions, and fetches their top-voted human answers.
+5. **Hacker News:** searches stories (with `optionalWords` for recall), then pulls each story's top human comments.
+6. **Reddit / X (optional):** when credentials are present, Reddit threads + top comments and bot-filtered X posts are added.
+7. Results are returned with source attribution and ranked by engagement. Bot/deleted/low-effort content is dropped throughout.
 
 ## Project structure
 
@@ -131,10 +142,12 @@ src/
     SearchBar.tsx  ResultCard.tsx  ConnectReddit.tsx  icons.tsx
   lib/
     bluesky.ts          # Bluesky source + bot heuristics
+    lemmy.ts            # Lemmy source (federated Reddit alt)
     stackexchange.ts    # Stack Exchange multi-site source
     hn.ts               # Hacker News source
     reddit.ts           # Reddit source (optional) + bot filtering
     x.ts                # X source (optional) + bot heuristics
+    query.ts            # keyword extraction / relevance (recall)
     cache.ts  rateLimit.ts  crypto.ts  redditAuth.ts
     types.ts  format.ts  fetchUtils.ts
 public/

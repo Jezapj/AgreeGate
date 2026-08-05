@@ -19,7 +19,8 @@ export default function ResultCard({
   const showUpvote =
     result.source === "reddit" ||
     result.source === "hn" ||
-    result.source === "se";
+    result.source === "se" ||
+    result.source === "lemmy";
   const authorPrefix = result.source === "reddit" ? "u/" : "";
   const badgeMeta: Record<string, { label: string; cls: string }> = {
     reddit: { label: "Reddit", cls: styles.badgeReddit },
@@ -27,6 +28,7 @@ export default function ResultCard({
     x: { label: "X", cls: styles.badgeX },
     bluesky: { label: "Bluesky", cls: styles.badgeBsky },
     se: { label: "Stack Exchange", cls: styles.badgeSe },
+    lemmy: { label: "Lemmy", cls: styles.badgeLemmy },
   };
   const badge = badgeMeta[result.source] ?? badgeMeta.reddit;
 
