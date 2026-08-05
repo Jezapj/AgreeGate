@@ -22,6 +22,42 @@
   flex-direction: column;
 }
 
+.previewCard {
+  border-style: dashed;
+}
+.previewSnippet {
+  margin: 10px 0 0;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.previewLink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.previewLink:hover .previewOpen {
+  color: var(--green-bright);
+}
+.previewUrl {
+  color: var(--text-faint);
+  word-break: break-all;
+}
+.previewOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* ---------- Connect Reddit ---------- */
 .homeTopRight {
   position: absolute;

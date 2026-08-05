@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchReddit } from "@/lib/reddit";
 import { searchHN } from "@/lib/hn";
-import { searchX } from "@/lib/x";
 import { searchBluesky } from "@/lib/bluesky";
 import { searchStackExchange } from "@/lib/stackexchange";
 import { searchLemmy } from "@/lib/lemmy";
+import { searchRedditPreviews, searchXPreviews } from "@/lib/previews";
 import { getCache, setCache } from "@/lib/cache";
 import { rateLimit } from "@/lib/rateLimit";
-import {
-  parseSession,
-  refreshSession,
-  serializeSession,
-  SESSION_COOKIE,
-} from "@/lib/redditAuth";
 import { SearchResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -47,7 +40,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Rate limit by client IP (best-effort; CDN cache hits never reach here).
   const ip = getClientIp(req);
   const rl = rateLimit(`search:${ip}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!rl.ok) {
@@ -64,77 +56,43 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Resolve the (optional) signed-in Reddit session and refresh if expiring.
-  let session = parseSession(req.cookies.get(SESSION_COOKIE)?.value);
-  let refreshedCookie: string | null = null;
-  if (session && session.expiresAt < Date.now() + 30_000) {
-    const refreshed = await refreshSession(session);
-    if (refreshed) {
-      session = refreshed;
-      refreshedCookie = serializeSession(refreshed);
-    } else {
-      session = null; // refresh failed; fall back to app-only
-    }
-  }
-  const userToken = session?.accessToken;
-
-  // Responses carrying a refreshed Set-Cookie must not be shared/cached.
-  const cacheHeader = refreshedCookie
-    ? "no-store"
-    : "public, s-maxage=600, stale-while-revalidate=86400";
-
-  function finalize(body: SearchResponse, xCache: "HIT" | "MISS") {
-    const res = NextResponse.json(
-      { ...body, cached: xCache === "HIT" },
-      {
-        headers: {
-          "Cache-Control":
-            body.results.length > 0 || xCache === "HIT" ? cacheHeader : "no-store",
-          "X-Cache": xCache,
-        },
-      }
-    );
-    if (refreshedCookie) {
-      res.cookies.set(SESSION_COOKIE, refreshedCookie, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      });
-    }
-    return res;
-  }
-
   const cacheKey = `${includeX ? "x1" : "x0"}:${query.toLowerCase()}`;
   const cached = getCache<SearchResponse>(cacheKey);
   if (cached) {
-    return finalize(cached, "HIT");
+    return NextResponse.json(
+      { ...cached, cached: true },
+      {
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=600, stale-while-revalidate=86400",
+          "X-Cache": "HIT",
+        },
+      }
+    );
   }
 
-  const [bluesky, lemmy, se, hn, reddit, x] = await Promise.all([
+  const [reddit, x, bluesky, lemmy, se, hn] = await Promise.all([
+    searchRedditPreviews(query),
+    includeX
+      ? searchXPreviews(query)
+      : Promise.resolve({
+          results: [],
+          status: { ok: false, count: 0, note: "X previews disabled for this search." },
+        }),
     searchBluesky(query),
     searchLemmy(query),
     searchStackExchange(query),
     searchHN(query),
-    searchReddit(query, { userToken }),
-    includeX
-      ? searchX(query)
-      : Promise.resolve({
-          results: [],
-          status: { ok: false, count: 0, note: "X disabled for this search." },
-        }),
   ]);
 
-  // Broad, free, all-topics sources lead (Bluesky + Lemmy + Stack Exchange + HN);
-  // Reddit/X are optional and appended when available.
+  // Reddit/X: Google-style link previews (via SearXNG). Others: inline human answers.
   const results = [
+    ...reddit.results,
+    ...x.results,
     ...bluesky.results,
     ...lemmy.results,
     ...se.results,
     ...hn.results,
-    ...reddit.results,
-    ...x.results,
   ];
 
   const payload: SearchResponse = {
@@ -142,19 +100,26 @@ export async function GET(req: NextRequest) {
     tookMs: Date.now() - start,
     results,
     sources: {
+      reddit: reddit.status,
+      x: x.status,
       bluesky: bluesky.status,
       lemmy: lemmy.status,
       se: se.status,
       hn: hn.status,
-      reddit: reddit.status,
-      x: x.status,
     },
   };
 
-  // Only cache responses that actually returned something useful.
   if (results.length > 0) {
     setCache(cacheKey, payload, CACHE_TTL_MS);
   }
 
-  return finalize(payload, "MISS");
+  return NextResponse.json(payload, {
+    headers: {
+      "Cache-Control":
+        results.length > 0
+          ? "public, s-maxage=600, stale-while-revalidate=86400"
+          : "no-store",
+      "X-Cache": "MISS",
+    },
+  });
 }

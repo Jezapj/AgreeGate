@@ -19,6 +19,9 @@ export interface SearchResult {
   numComments?: number;
   createdUtc: number;
   selfText?: string;
+  /** Google-style link preview (Reddit / X via SearXNG). */
+  preview?: boolean;
+  snippet?: string;
   answers: Answer[];
 }
 

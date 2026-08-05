@@ -5,7 +5,6 @@ import Image from "next/image";
 import styles from "./page.module.css";
 import SearchBar from "@/components/SearchBar";
 import ResultCard from "@/components/ResultCard";
-import ConnectReddit from "@/components/ConnectReddit";
 import { SearchResponse } from "@/lib/types";
 
 const EXAMPLES = [
@@ -23,7 +22,7 @@ const SOURCE_LABELS: Record<string, string> = {
   reddit: "Reddit",
   x: "X",
 };
-const SOURCE_ORDER = ["bluesky", "lemmy", "se", "hn", "reddit", "x"];
+const SOURCE_ORDER = ["reddit", "x", "bluesky", "lemmy", "se", "hn"];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -31,7 +30,6 @@ export default function Home() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -59,42 +57,19 @@ export default function Home() {
     }
   }, []);
 
-  // Restore a query from the URL on first load (e.g. shared link),
-  // and surface the result of a Reddit connect redirect.
+  // Restore a query from the URL on first load (e.g. shared link).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const connect = params.get("connect");
-    if (connect) {
-      setNotice(
-        connect === "success"
-          ? "Reddit connected — you're now searching on your own rate limit."
-          : "Couldn't connect Reddit. Please try again."
-      );
-      params.delete("connect");
-      const rest = params.toString();
-      window.history.replaceState(null, "", rest ? `/?${rest}` : "/");
-      setTimeout(() => setNotice(null), 6000);
-    }
     const q = params.get("q");
     if (q) runSearch(q);
   }, [runSearch]);
 
   const hasSearched = activeQuery.length > 0;
 
-  const toastEl = notice ? (
-    <div className={styles.toast} role="status">
-      {notice}
-    </div>
-  ) : null;
-
   if (!hasSearched) {
     return (
       <main className={styles.page}>
-        {toastEl}
         <div className={styles.home}>
-          <div className={styles.homeTopRight}>
-            <ConnectReddit />
-          </div>
           <div className={styles.hero}>
             <Image
               className={styles.logoMark}
@@ -109,9 +84,9 @@ export default function Home() {
               <span className={styles.gate}>Gate</span>
             </h1>
             <p className={styles.tagline}>
-              Answers from <b>real people</b> across every topic — pulled from
-              Bluesky, Lemmy, Stack Exchange &amp; Hacker News. No sponsored
-              results. No AI summaries. No bots.
+              Answers from <b>real people</b> across every topic — Reddit &amp; X
+              link previews plus inline answers from Bluesky, Lemmy, Stack Exchange
+              &amp; Hacker News. No sponsored results. No AI summaries.
             </p>
 
             <SearchBar onSearch={runSearch} loading={loading} autoFocus />
@@ -149,7 +124,6 @@ export default function Home() {
 
   return (
     <main className={styles.resultsPage}>
-      {toastEl}
       <header className={styles.topbar}>
         <a
           className={styles.topbarBrand}
@@ -180,7 +154,6 @@ export default function Home() {
             initialValue={query}
           />
         </div>
-        <ConnectReddit />
       </header>
 
       <div className={styles.results}>
@@ -273,7 +246,7 @@ function LoadingState() {
     <div>
       <div className={styles.loader}>
         <div className={styles.spinner} />
-        <span>Asking real people across Bluesky, Stack Exchange &amp; more…</span>
+        <span>Searching Reddit, X, Bluesky, Stack Exchange &amp; more…</span>
       </div>
       {[0, 1, 2].map((i) => (
         <div className={styles.skeleton} key={i} />
@@ -285,8 +258,8 @@ function LoadingState() {
 function Footer() {
   return (
     <footer className={styles.footer}>
-      <b>AgreeGate</b> — real answers from real humans. Every result links back
-      to the original post on Bluesky, Lemmy, Stack Exchange, Hacker News &amp; more.
+      <b>AgreeGate</b> — real answers from real humans. Reddit &amp; X link out to
+      the original posts; other sources show inline human responses.
     </footer>
   );
 }

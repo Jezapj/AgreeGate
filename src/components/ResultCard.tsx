@@ -32,6 +32,58 @@ export default function ResultCard({
   };
   const badge = badgeMeta[result.source] ?? badgeMeta.reddit;
 
+  if (result.preview) {
+    const openLabel = result.source === "reddit" ? "Open on Reddit" : "Open on X";
+    let displayUrl = result.url;
+    try {
+      const u = new URL(result.url);
+      displayUrl = u.hostname.replace(/^www\./, "") + u.pathname;
+      if (displayUrl.length > 72) displayUrl = displayUrl.slice(0, 69) + "…";
+    } catch {
+      /* keep full url */
+    }
+
+    return (
+      <article
+        className={`${styles.card} ${styles.previewCard}`}
+        style={{ animationDelay: `${Math.min(index * 0.05, 0.4)}s` }}
+      >
+        <div className={styles.cardHead}>
+          <span className={`${styles.badge} ${badge.cls}`}>{badge.label}</span>
+          <div className={styles.cardTitleWrap}>
+            <a
+              className={styles.cardTitle}
+              href={result.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {result.title}
+            </a>
+            {result.subtitle && (
+              <div className={styles.cardSub}>
+                <span className={styles.src}>{result.subtitle}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        {result.snippet && (
+          <p className={styles.previewSnippet}>{result.snippet}</p>
+        )}
+        <a
+          className={styles.previewLink}
+          href={result.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className={styles.previewUrl}>{displayUrl}</span>
+          <span className={styles.previewOpen}>
+            {openLabel} <ExternalIcon />
+          </span>
+        </a>
+      </article>
+    );
+  }
+
   return (
     <article
       className={styles.card}
