@@ -18,6 +18,15 @@ export interface Keywordized {
   query: string;
 }
 
+/** All normalized words from the query (length >= 2), for ranking coverage. */
+export function queryWords(input: string): string[] {
+  return input
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+}
+
 /**
  * Reduce a natural-language question to its core keywords. This dramatically
  * improves recall on APIs that match query terms literally (Bluesky, Lemmy),

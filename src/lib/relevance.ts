@@ -1,30 +1,79 @@
-import { keywordize } from "@/lib/query";
+import { keywordize, queryWords } from "@/lib/query";
 import { SearchResult, Source } from "@/lib/types";
 
-/** Slight boost for Reddit and X previews; Reddit weighted highest. */
+/** Boost Reddit and X previews in relevance ranking. */
 const SOURCE_WEIGHT: Record<Source, number> = {
-  reddit: 1.35,
-  x: 1.15,
+  reddit: 1.7,
+  x: 1.4,
   bluesky: 1,
   lemmy: 1,
   se: 1,
   hn: 1,
 };
 
+const CONTENT_WORD_MATCH = 7;
+const OTHER_WORD_MATCH = 3;
+const PHRASE_MATCH = 18;
+const COVERAGE_BONUS = 22;
+const CONTENT_COVERAGE_BONUS = 14;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function wordMatchStrength(text: string, word: string): number {
+  if (!text || !word) return 0;
+  const t = text.toLowerCase();
+  const w = word.toLowerCase();
+  if (!t.includes(w)) return 0;
+
+  const boundary = new RegExp(`\\b${escapeRegExp(w)}\\b`, "i").test(text);
+  return boundary ? 1 : 0.65;
+}
+
 function textRelevance(
   text: string,
-  keywords: string[],
-  normalizedQuery: string
+  contentWords: string[],
+  allWords: string[],
+  normalizedQuery: string,
+  fieldWeight = 1
 ): number {
-  const t = (text || "").toLowerCase();
-  if (!t) return 0;
+  if (!text.trim()) return 0;
 
   let score = 0;
   const q = normalizedQuery.toLowerCase().trim();
-  if (q.length >= 4 && t.includes(q)) score += 10;
+  if (q.length >= 4 && text.toLowerCase().includes(q)) {
+    score += PHRASE_MATCH * fieldWeight;
+  }
 
-  for (const kw of keywords) {
-    if (t.includes(kw)) score += 3;
+  let contentMatched = 0;
+  for (const word of contentWords) {
+    const strength = wordMatchStrength(text, word);
+    if (strength > 0) {
+      contentMatched++;
+      score += CONTENT_WORD_MATCH * strength * fieldWeight;
+    }
+  }
+
+  const otherWords = allWords.filter((w) => !contentWords.includes(w));
+  let otherMatched = 0;
+  for (const word of otherWords) {
+    const strength = wordMatchStrength(text, word);
+    if (strength > 0) {
+      otherMatched++;
+      score += OTHER_WORD_MATCH * strength * fieldWeight;
+    }
+  }
+
+  const totalTerms = allWords.length;
+  if (totalTerms > 0) {
+    const coverage = (contentMatched + otherMatched) / totalTerms;
+    score += coverage * coverage * COVERAGE_BONUS * fieldWeight;
+  }
+
+  if (contentWords.length > 0) {
+    const contentCoverage = contentMatched / contentWords.length;
+    score += contentCoverage * CONTENT_COVERAGE_BONUS * fieldWeight;
   }
 
   return score;
@@ -44,15 +93,21 @@ function engagementBoost(result: SearchResult): number {
 /** Score how well a result matches the user's query. */
 export function scoreResult(query: string, result: SearchResult): number {
   const { keywords, query: kwQuery } = keywordize(query);
-  const corpus = [
-    result.title,
-    result.subtitle ?? "",
-    result.snippet ?? "",
-    result.selfText ?? "",
-    ...result.answers.map((a) => a.body),
-  ].join(" ");
+  const allWords = queryWords(query);
 
-  const textScore = textRelevance(corpus, keywords, kwQuery);
+  const fields: { text: string; weight: number }[] = [
+    { text: result.title, weight: 3 },
+    { text: result.subtitle ?? "", weight: 2.2 },
+    { text: result.snippet ?? "", weight: 2.2 },
+    { text: result.selfText ?? "", weight: 1.6 },
+    ...result.answers.map((a) => ({ text: a.body, weight: 1 })),
+  ];
+
+  let textScore = 0;
+  for (const { text, weight } of fields) {
+    textScore += textRelevance(text, keywords, allWords, kwQuery, weight);
+  }
+
   const raw = textScore + engagementBoost(result);
   return raw * SOURCE_WEIGHT[result.source];
 }

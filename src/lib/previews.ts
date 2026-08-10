@@ -1,9 +1,27 @@
 import { SearchResult, SourceStatus } from "./types";
-import { searxngConfigured, searxSearch } from "./searxng";
+import { searxngConfigured, searxSearch, SearxngRateLimitedError } from "./searxng";
+import { getCache, setCache } from "./cache";
 import { stripHtml } from "./fetchUtils";
 
 const OFF_NOTE =
   "Reddit & X previews are off — set SEARXNG_URL to your SearXNG instance (see README).";
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const PREVIEW_CACHE_MS = envInt("SEARXNG_PREVIEW_CACHE_MS", 30 * 60 * 1000);
+const PREVIEW_EMPTY_CACHE_MS = envInt("SEARXNG_PREVIEW_EMPTY_CACHE_MS", 2 * 60 * 1000);
+const REDDIT_PREVIEW_LIMIT = envInt("REDDIT_PREVIEW_LIMIT", 6);
+const X_PREVIEW_LIMIT = envInt("X_PREVIEW_LIMIT", 5);
+
+interface PreviewPayload {
+  results: SearchResult[];
+  status: SourceStatus;
+}
 
 function clamp(text: string, max = 280): string {
   const t = stripHtml(text).replace(/\s+/g, " ").trim();
@@ -51,7 +69,9 @@ function isRedditPost(url: string): boolean {
 
 function isXPost(url: string): boolean {
   const h = hostOf(url);
-  if (h !== "x.com" && h !== "twitter.com" && h !== "mobile.twitter.com") return false;
+  if (h !== "x.com" && h !== "twitter.com" && h !== "mobile.twitter.com") {
+    return false;
+  }
   try {
     return /\/status\/\d+/.test(new URL(url).pathname);
   } catch {
@@ -89,20 +109,17 @@ function hashCode(s: string): string {
   return Math.abs(h).toString(36);
 }
 
-async function searchSitePreviews(
-  query: string,
-  site: "reddit.com" | "x.com",
+function hitsToPreviews(
+  hits: { url: string; title: string; content?: string }[],
   source: "reddit" | "x",
-  limit: number
-): Promise<SearchResult[]> {
-  const hits = await searxSearch(`site:${site} ${query}`, { limit: limit + 5 });
+  limit: number,
+  validate: (url: string) => boolean
+): SearchResult[] {
   const seen = new Set<string>();
   const results: SearchResult[] = [];
 
   for (const hit of hits) {
-    if (!hit.url || !hit.title) continue;
-    const ok = source === "reddit" ? isRedditPost(hit.url) : isXPost(hit.url);
-    if (!ok) continue;
+    if (!hit.url || !hit.title || !validate(hit.url)) continue;
     const key = hit.url.split("?")[0];
     if (seen.has(key)) continue;
     seen.add(key);
@@ -113,21 +130,42 @@ async function searchSitePreviews(
   return results;
 }
 
-export async function searchRedditPreviews(
+async function withPreviewCache(
+  cacheKey: string,
+  fetcher: () => Promise<PreviewPayload>
+): Promise<PreviewPayload> {
+  const cached = getCache<PreviewPayload>(cacheKey);
+  if (cached) return cached;
+
+  const value = await fetcher();
+  const ttl =
+    value.results.length > 0 ? PREVIEW_CACHE_MS : PREVIEW_EMPTY_CACHE_MS;
+  setCache(cacheKey, value, ttl);
+  return value;
+}
+
+function throttledStatus(source: string, retryAfterSec: number): SourceStatus {
+  return {
+    ok: false,
+    count: 0,
+    note: `${source} previews paused for ~${retryAfterSec}s — AgreeGate is limiting SearXNG calls to avoid upstream engine suspensions.`,
+  };
+}
+
+async function searchRedditPreviewsUncached(
   query: string,
-  opts: { limit?: number } = {}
-): Promise<{ results: SearchResult[]; status: SourceStatus }> {
-  const { limit = 6 } = opts;
-  if (!searxngConfigured()) {
-    return { results: [], status: { ok: false, count: 0, note: OFF_NOTE } };
-  }
+  limit: number
+): Promise<PreviewPayload> {
   try {
-    const results = await searchSitePreviews(query, "reddit.com", "reddit", limit);
-    return {
-      results,
-      status: { ok: true, count: results.length },
-    };
-  } catch {
+    const hits = await searxSearch(`site:reddit.com ${query}`, {
+      limit: limit + 5,
+    });
+    const results = hitsToPreviews(hits, "reddit", limit, isRedditPost);
+    return { results, status: { ok: true, count: results.length } };
+  } catch (e) {
+    if (e instanceof SearxngRateLimitedError) {
+      return { results: [], status: throttledStatus("Reddit", e.retryAfterSec) };
+    }
     return {
       results: [],
       status: { ok: false, count: 0, note: "SearXNG could not be reached for Reddit." },
@@ -135,48 +173,50 @@ export async function searchRedditPreviews(
   }
 }
 
-export async function searchXPreviews(
+async function searchXPreviewsUncached(
   query: string,
-  opts: { limit?: number } = {}
-): Promise<{ results: SearchResult[]; status: SourceStatus }> {
-  const { limit = 5 } = opts;
-  if (!searxngConfigured()) {
-    return { results: [], status: { ok: false, count: 0 } };
-  }
+  limit: number
+): Promise<PreviewPayload> {
   try {
-    // Search both x.com and twitter.com domains via two queries, merge.
-    const [xHits, twHits] = await Promise.all([
-      searchSitePreviews(query, "x.com", "x", limit),
-      searxSearch(`site:twitter.com ${query}`, { limit: limit + 3 }).then((hits) => {
-        const seen = new Set<string>();
-        const out: SearchResult[] = [];
-        for (const hit of hits) {
-          if (!hit.url || !isXPost(hit.url)) continue;
-          const key = hit.url.split("?")[0];
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push(toPreview(hit, "x", out.length));
-          if (out.length >= limit) break;
-        }
-        return out;
-      }),
-    ]);
-
-    const merged = [...xHits];
-    const seen = new Set(xHits.map((r) => r.url.split("?")[0]));
-    for (const r of twHits) {
-      const key = r.url.split("?")[0];
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(r);
-      if (merged.length >= limit) break;
+    // One SearXNG call instead of two (x.com + twitter.com).
+    const hits = await searxSearch(`(site:x.com OR site:twitter.com) ${query}`, {
+      limit: limit + 8,
+    });
+    const results = hitsToPreviews(hits, "x", limit, isXPost);
+    return { results, status: { ok: true, count: results.length } };
+  } catch (e) {
+    if (e instanceof SearxngRateLimitedError) {
+      return { results: [], status: throttledStatus("X", e.retryAfterSec) };
     }
-
-    return { results: merged.slice(0, limit), status: { ok: true, count: merged.length } };
-  } catch {
     return {
       results: [],
       status: { ok: false, count: 0, note: "SearXNG could not be reached for X." },
     };
   }
+}
+
+export async function searchRedditPreviews(
+  query: string,
+  opts: { limit?: number } = {}
+): Promise<{ results: SearchResult[]; status: SourceStatus }> {
+  const limit = opts.limit ?? REDDIT_PREVIEW_LIMIT;
+  if (!searxngConfigured()) {
+    return { results: [], status: { ok: false, count: 0, note: OFF_NOTE } };
+  }
+
+  const cacheKey = `preview:reddit:${query.toLowerCase()}`;
+  return withPreviewCache(cacheKey, () => searchRedditPreviewsUncached(query, limit));
+}
+
+export async function searchXPreviews(
+  query: string,
+  opts: { limit?: number } = {}
+): Promise<{ results: SearchResult[]; status: SourceStatus }> {
+  const limit = opts.limit ?? X_PREVIEW_LIMIT;
+  if (!searxngConfigured()) {
+    return { results: [], status: { ok: false, count: 0 } };
+  }
+
+  const cacheKey = `preview:x:${query.toLowerCase()}`;
+  return withPreviewCache(cacheKey, () => searchXPreviewsUncached(query, limit));
 }

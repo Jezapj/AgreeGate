@@ -1,4 +1,15 @@
 import { BROWSER_UA, decodeEntities, fetchJson, stripHtml } from "./fetchUtils";
+import { assertSearxngBudget, SearxngRateLimitedError } from "./searxngLimit";
+import {
+  getInstancesForAttempt,
+  htmlShowsEngineSuspension,
+  markInstanceHealthy,
+  markInstanceUnhealthy,
+  searxngConfigured,
+} from "./searxngPool";
+
+export { SearxngRateLimitedError } from "./searxngLimit";
+export { getSearxInstances, searxngConfigured } from "./searxngPool";
 
 export interface SearxHit {
   url: string;
@@ -11,18 +22,24 @@ interface SearxResponse {
   results?: SearxHit[];
 }
 
-export function searxngConfigured(): boolean {
-  return !!process.env.SEARXNG_URL?.trim();
-}
-
-function baseUrl(): string {
-  const raw = process.env.SEARXNG_URL?.trim() || "";
-  return raw.replace(/\/+$/, "");
+interface ParseResult {
+  hits: SearxHit[];
+  enginesSuspended: boolean;
 }
 
 /** Parse SearXNG HTML results (fallback when JSON API is blocked). */
-function parseSearxHtml(html: string): SearxHit[] {
+function parseSearxHtml(html: string): ParseResult {
   const results: SearxHit[] = [];
+  const seen = new Set<string>();
+
+  function pushHit(url: string, title: string, content?: string) {
+    const cleanUrl = decodeEntities(url.trim());
+    const cleanTitle = stripHtml(title);
+    if (!cleanUrl || !cleanTitle || seen.has(cleanUrl)) return;
+    seen.add(cleanUrl);
+    results.push({ url: cleanUrl, title: cleanTitle, content });
+  }
+
   const articleRe =
     /<article[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
   let match: RegExpExecArray | null;
@@ -34,21 +51,26 @@ function parseSearxHtml(html: string): SearxHit[] {
     );
     if (!titleMatch) continue;
 
-    const url = decodeEntities(titleMatch[1].trim());
-    const title = stripHtml(titleMatch[2]);
-    if (!url || !title) continue;
-
     const contentMatch = block.match(/<p class="content">\s*([\s\S]*?)\s*<\/p>/i);
     const content = contentMatch ? stripHtml(contentMatch[1]) : undefined;
-
-    results.push({ url, title, content });
+    pushHit(titleMatch[1], titleMatch[2], content);
   }
 
-  return results;
+  if (results.length === 0) {
+    const titleRe =
+      /<h3>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*<\/h3>\s*(?:<!--[\s\S]*?-->\s*)?<p class="content">\s*([\s\S]*?)\s*<\/p>/gi;
+    while ((match = titleRe.exec(html)) !== null) {
+      pushHit(match[1], match[2], stripHtml(match[3]));
+    }
+  }
+
+  return {
+    hits: results,
+    enginesSuspended: htmlShowsEngineSuspension(html),
+  };
 }
 
-async function fetchSearxHtml(query: string): Promise<SearxHit[]> {
-  const base = baseUrl();
+async function fetchSearxHtml(base: string, query: string): Promise<ParseResult> {
   const params = new URLSearchParams({
     q: query,
     categories: "general",
@@ -66,24 +88,22 @@ async function fetchSearxHtml(query: string): Promise<SearxHit[]> {
       signal: controller.signal,
       cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      return { hits: [], enginesSuspended: false };
+    }
     return parseSearxHtml(await res.text());
   } catch {
-    return [];
+    return { hits: [], enginesSuspended: false };
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** Run a web search via your self-hosted SearXNG instance. */
-export async function searxSearch(
+async function searchOnInstance(
+  base: string,
   query: string,
-  opts: { limit?: number } = {}
-): Promise<SearxHit[]> {
-  const { limit = 10 } = opts;
-  const base = baseUrl();
-  if (!base) return [];
-
+  limit: number
+): Promise<ParseResult> {
   const params = new URLSearchParams({
     q: query,
     format: "json",
@@ -91,7 +111,6 @@ export async function searxSearch(
     language: "en",
   });
 
-  // Prefer JSON when allowed; many instances block it (403) via bot detection.
   try {
     const json = await fetchJson<SearxResponse>(
       `${base}/search?${params.toString()}`,
@@ -101,10 +120,59 @@ export async function searxSearch(
       }
     );
     const hits = json.results ?? [];
-    if (hits.length > 0) return hits.slice(0, limit);
+    if (hits.length > 0) {
+      return { hits: hits.slice(0, limit), enginesSuspended: false };
+    }
   } catch {
     /* fall through to HTML */
   }
 
-  return (await fetchSearxHtml(query)).slice(0, limit);
+  const htmlResult = await fetchSearxHtml(base, query);
+  return {
+    hits: htmlResult.hits.slice(0, limit),
+    enginesSuspended: htmlResult.enginesSuspended,
+  };
+}
+
+/**
+ * Run a web search via your SearXNG pool. Tries instances in round-robin order,
+ * skipping unhealthy hosts and failing over on suspension or per-instance limits.
+ */
+export async function searxSearch(
+  query: string,
+  opts: { limit?: number } = {}
+): Promise<SearxHit[]> {
+  const { limit = 10 } = opts;
+  const instances = getInstancesForAttempt();
+  if (!instances.length) return [];
+
+  let shortestRetrySec = 60;
+  let triedAny = false;
+
+  for (const base of instances) {
+    try {
+      assertSearxngBudget(base);
+    } catch (e) {
+      if (e instanceof SearxngRateLimitedError) {
+        shortestRetrySec = Math.min(shortestRetrySec, e.retryAfterSec);
+        continue;
+      }
+      throw e;
+    }
+
+    triedAny = true;
+    const result = await searchOnInstance(base, query, limit);
+
+    if (result.enginesSuspended) {
+      markInstanceUnhealthy(base);
+      continue;
+    }
+
+    markInstanceHealthy(base);
+    return result.hits;
+  }
+
+  if (triedAny) return [];
+
+  throw new SearxngRateLimitedError(shortestRetrySec);
 }
