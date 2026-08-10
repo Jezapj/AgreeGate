@@ -55,9 +55,12 @@ export default function SearchBar({
           className={styles.searchBtn}
           type="submit"
           disabled={loading || !value.trim()}
+          aria-label={loading ? "Searching" : "Search"}
         >
-          {loading ? "Searching" : "Search"}
-          {!loading && <ArrowUpIcon size={15} />}
+          <span className={styles.searchBtnLabel}>
+            {loading ? "Searching" : "Search"}
+          </span>
+          {!loading && <ArrowUpIcon size={15} className={styles.searchBtnIcon} />}
         </button>
       </div>
     </form>

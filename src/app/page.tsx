@@ -73,7 +73,7 @@ export default function Home() {
           <div className={styles.hero}>
             <Image
               className={styles.logoMark}
-              src="/logo-dark.png"
+              src="/GateTRNSP.png"
               alt="AgreeGate"
               width={104}
               height={104}
@@ -84,9 +84,9 @@ export default function Home() {
               <span className={styles.gate}>Gate</span>
             </h1>
             <p className={styles.tagline}>
-              Answers from <b>real people</b> across every topic — Reddit &amp; X
-              link previews plus inline answers from Bluesky, Lemmy, Stack Exchange
-              &amp; Hacker News. No sponsored results. No AI summaries.
+              Answers from <b>real people</b> across every topic - Reddit &amp; X,
+              Bluesky, Lemmy, Stack Exchange &amp; Hacker News. 
+              No sponsored results. No AI summaries.
             </p>
 
             <SearchBar onSearch={runSearch} loading={loading} autoFocus />
@@ -166,8 +166,10 @@ export default function Home() {
         {!loading && data && (
           <>
             <div className={styles.metaRow}>
-              {SOURCE_ORDER.filter((key) => data.sources[key as keyof typeof data.sources]).map(
-                (key) => {
+              <div className={styles.metaPillsScroll}>
+                {SOURCE_ORDER.filter(
+                  (key) => data.sources[key as keyof typeof data.sources]
+                ).map((key) => {
                   const s = data.sources[key as keyof typeof data.sources]!;
                   return (
                     <SourcePill
@@ -177,9 +179,9 @@ export default function Home() {
                       count={s.count}
                     />
                   );
-                }
-              )}
-              <span>
+                })}
+              </div>
+              <span className={styles.metaStats}>
                 {data.results.length} result
                 {data.results.length === 1 ? "" : "s"} · {data.tookMs}ms
               </span>
@@ -189,7 +191,7 @@ export default function Home() {
               <div className={styles.empty}>
                 <h3>No human answers found</h3>
                 <p>
-                  Try rephrasing — broader, conversational wording tends to match
+                  Try rephrasing - broader, conversational wording tends to match
                   real discussions best.
                 </p>
               </div>
@@ -258,7 +260,7 @@ function LoadingState() {
 function Footer() {
   return (
     <footer className={styles.footer}>
-      <b>AgreeGate</b> — real answers from real humans. Reddit &amp; X link out to
+      <b>AgreeGate</b> - real answers from real humans. Reddit &amp; X link out to
       the original posts; other sources show inline human responses.
     </footer>
   );

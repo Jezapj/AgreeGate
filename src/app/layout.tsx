@@ -7,7 +7,7 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "AgreeGate — Answers from real people",
+  title: "AgreeGate - Answers from real people",
   description:
     "A search engine that returns answers from real humans. No sponsored results. No AI summaries. Pulled live from Reddit and X.",
   icons: {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     apple: "/icon.png",
   },
   openGraph: {
-    title: "AgreeGate — Answers from real people",
+    title: "AgreeGate - Answers from real people",
     description:
       "Search real human answers from Reddit and X. No sponsored results. No AI summaries.",
     images: ["/logo-dark.png"],
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050605",
+  themeColor: "#0a0f14",
   width: "device-width",
   initialScale: 1,
 };
