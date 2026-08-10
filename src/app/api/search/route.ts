@@ -4,6 +4,7 @@ import { searchBluesky } from "@/lib/bluesky";
 import { searchStackExchange } from "@/lib/stackexchange";
 import { searchLemmy } from "@/lib/lemmy";
 import { searchRedditPreviews, searchXPreviews } from "@/lib/previews";
+import { rankResults } from "@/lib/relevance";
 import { getCache, setCache } from "@/lib/cache";
 import { rateLimit } from "@/lib/rateLimit";
 import { SearchResponse } from "@/lib/types";
@@ -86,14 +87,14 @@ export async function GET(req: NextRequest) {
   ]);
 
   // Reddit/X: Google-style link previews (via SearXNG). Others: inline human answers.
-  const results = [
+  const results = rankResults(query, [
     ...reddit.results,
     ...x.results,
     ...bluesky.results,
     ...lemmy.results,
     ...se.results,
     ...hn.results,
-  ];
+  ]);
 
   const payload: SearchResponse = {
     query,

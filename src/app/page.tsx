@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 import SearchBar from "@/components/SearchBar";
 import ResultCard from "@/components/ResultCard";
-import { SearchResponse } from "@/lib/types";
+import { SearchResponse, Source } from "@/lib/types";
+import { groupResultsBySource } from "@/lib/relevance";
 
 const EXAMPLES = [
   "best way to cook salmon",
@@ -14,7 +15,7 @@ const EXAMPLES = [
   "is the carnivore diet actually healthy",
 ];
 
-const SOURCE_LABELS: Record<string, string> = {
+const SOURCE_LABELS: Record<Source, string> = {
   bluesky: "Bluesky",
   lemmy: "Lemmy",
   se: "Stack Exchange",
@@ -22,7 +23,14 @@ const SOURCE_LABELS: Record<string, string> = {
   reddit: "Reddit",
   x: "X",
 };
-const SOURCE_ORDER = ["reddit", "x", "bluesky", "lemmy", "se", "hn"];
+const SOURCE_NOTES_ORDER: Source[] = [
+  "reddit",
+  "x",
+  "bluesky",
+  "lemmy",
+  "se",
+  "hn",
+];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -30,6 +38,36 @@ export default function Home() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedSource, setFocusedSource] = useState<Source | null>(null);
+  const resultsTopRef = useRef<HTMLDivElement>(null);
+
+  const sourceGroups = useMemo(
+    () => (data ? groupResultsBySource(data.results) : []),
+    [data]
+  );
+
+  const groupedView = useMemo(
+    () =>
+      data && focusedSource
+        ? groupResultsBySource(data.results, focusedSource)
+        : [],
+    [data, focusedSource]
+  );
+
+  const toggleSource = useCallback((source: Source) => {
+    setFocusedSource((prev) => {
+      const next = prev === source ? null : source;
+      if (next) {
+        requestAnimationFrame(() => {
+          resultsTopRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+      }
+      return next;
+    });
+  }, []);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -39,6 +77,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setData(null);
+    setFocusedSource(null);
 
     const params = new URLSearchParams({ q: trimmed });
     window.history.replaceState(null, "", `/?${params.toString()}`);
@@ -133,6 +172,7 @@ export default function Home() {
             setActiveQuery("");
             setData(null);
             setQuery("");
+            setFocusedSource(null);
             window.history.replaceState(null, "", "/");
           }}
         >
@@ -167,19 +207,31 @@ export default function Home() {
           <>
             <div className={styles.metaRow}>
               <div className={styles.metaPillsScroll}>
-                {SOURCE_ORDER.filter(
-                  (key) => data.sources[key as keyof typeof data.sources]
-                ).map((key) => {
-                  const s = data.sources[key as keyof typeof data.sources]!;
-                  return (
-                    <SourcePill
-                      key={key}
-                      label={SOURCE_LABELS[key] ?? key}
-                      ok={s.ok}
-                      count={s.count}
-                    />
-                  );
-                })}
+                {[
+                  ...sourceGroups.map(({ source, results }) => ({
+                    source,
+                    count: results.length,
+                    ok: data.sources[source]?.ok ?? false,
+                  })),
+                  ...SOURCE_NOTES_ORDER.filter(
+                    (source) =>
+                      data.sources[source] &&
+                      !sourceGroups.some((g) => g.source === source)
+                  ).map((source) => ({
+                    source,
+                    count: data.sources[source]?.count ?? 0,
+                    ok: data.sources[source]?.ok ?? false,
+                  })),
+                ].map(({ source, count, ok }) => (
+                  <SourcePill
+                    key={source}
+                    label={SOURCE_LABELS[source]}
+                    ok={ok}
+                    count={count}
+                    active={focusedSource === source}
+                    onClick={() => toggleSource(source)}
+                  />
+                ))}
               </div>
               <span className={styles.metaStats}>
                 {data.results.length} result
@@ -187,19 +239,35 @@ export default function Home() {
               </span>
             </div>
 
-            {data.results.length === 0 ? (
-              <div className={styles.empty}>
-                <h3>No human answers found</h3>
-                <p>
-                  Try rephrasing - broader, conversational wording tends to match
-                  real discussions best.
-                </p>
-              </div>
-            ) : (
-              data.results.map((r, i) => (
-                <ResultCard key={r.id} result={r} index={i} />
-              ))
-            )}
+            <div ref={resultsTopRef} className={styles.resultsList}>
+              {data.results.length === 0 ? (
+                <div className={styles.empty}>
+                  <h3>No human answers found</h3>
+                  <p>
+                    Try rephrasing - broader, conversational wording tends to match
+                    real discussions best.
+                  </p>
+                </div>
+              ) : focusedSource ? (
+                groupedView.map(({ source, results }) => (
+                  <section key={source} className={styles.sourceSection}>
+                    <h2 className={styles.sourceHeading}>
+                      {SOURCE_LABELS[source]}
+                      <span className={styles.sourceHeadingCount}>
+                        {results.length}
+                      </span>
+                    </h2>
+                    {results.map((r, i) => (
+                      <ResultCard key={r.id} result={r} index={i} />
+                    ))}
+                  </section>
+                ))
+              ) : (
+                data.results.map((r, i) => (
+                  <ResultCard key={r.id} result={r} index={i} />
+                ))
+              )}
+            </div>
 
             {(sourceNotes(data).length > 0) && (
               <div className={styles.sourceNotes}>
@@ -218,8 +286,8 @@ export default function Home() {
 
 function sourceNotes(data: SearchResponse): string[] {
   const notes: string[] = [];
-  for (const key of SOURCE_ORDER) {
-    const s = data.sources[key as keyof typeof data.sources];
+  for (const key of SOURCE_NOTES_ORDER) {
+    const s = data.sources[key];
     if (s && !s.ok && s.note) notes.push(s.note);
   }
   return notes;
@@ -229,17 +297,38 @@ function SourcePill({
   label,
   ok,
   count,
+  active,
+  onClick,
 }: {
   label: string;
   ok: boolean;
   count: number;
+  active: boolean;
+  onClick: () => void;
 }) {
+  const clickable = ok && count > 0;
+
   return (
-    <span className={styles.sourcePill}>
+    <button
+      type="button"
+      className={`${styles.sourcePill} ${clickable ? styles.sourcePillBtn : ""} ${
+        active ? styles.sourcePillActive : ""
+      }`}
+      onClick={clickable ? onClick : undefined}
+      disabled={!clickable}
+      aria-pressed={active}
+      aria-label={
+        clickable
+          ? active
+            ? `Show all sources, ${label} grouped view on`
+            : `Group by source with ${label} first, ${count} results`
+          : `${label} unavailable`
+      }
+    >
       <span className={`${styles.led} ${ok ? styles.ledOn : styles.ledOff}`} />
       {label}
       {ok ? ` · ${count}` : " · off"}
-    </span>
+    </button>
   );
 }
 
