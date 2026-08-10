@@ -178,7 +178,7 @@ export default function Home() {
         >
           <Image
             className={styles.topbarLogo}
-            src="/logo-dark.png"
+            src="/GateTRNSP.png"
             alt="AgreeGate"
             width={34}
             height={34}

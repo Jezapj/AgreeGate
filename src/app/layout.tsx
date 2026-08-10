@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -7,18 +8,28 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  applicationName: "AgreeGate",
   title: "AgreeGate - Answers from real people",
   description:
     "A search engine that returns answers from real humans. No sponsored results. No AI summaries. Pulled live from Reddit and X.",
+  manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icon.png",
-    apple: "/icon.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "AgreeGate",
+    statusBarStyle: "black-translucent",
   },
   openGraph: {
     title: "AgreeGate - Answers from real people",
     description:
       "Search real human answers from Reddit and X. No sponsored results. No AI summaries.",
-    images: ["/logo-dark.png"],
+    images: ["/GateTRNSP.png"],
   },
 };
 
@@ -35,7 +46,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }
