@@ -38,8 +38,7 @@ async function writeIcon(size, filename, paddingRatio) {
   console.log(`Wrote public/${filename} (padding ${Math.round(paddingRatio * 100)}%)`);
 }
 
-// Tight crop for favicons and home-screen icons.
-await writeIcon(192, "icon-192.png", 0.03);
-await writeIcon(512, "icon-512.png", 0.03);
-// Maskable icons need a little extra safe margin for Android cropping.
-await writeIcon(512, "icon-maskable-512.png", 0.1);
+// Slightly inset so the gate reads clearly at small sizes without feeling cramped.
+await writeIcon(192, "icon-192.png", 0.06);
+await writeIcon(512, "icon-512.png", 0.06);
+await writeIcon(512, "icon-maskable-512.png", 0.13);
