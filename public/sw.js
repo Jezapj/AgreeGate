@@ -1,4 +1,4 @@
-const CACHE_NAME = "agreegate-static-v4";
+const CACHE_NAME = "agreegate-static-v5";
 
 const PRECACHE_URLS = [
   "/icon-192.png",

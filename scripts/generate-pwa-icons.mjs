@@ -39,6 +39,6 @@ async function writeIcon(size, filename, paddingRatio) {
 }
 
 // Slightly inset so the gate reads clearly at small sizes without feeling cramped.
-await writeIcon(192, "icon-192.png", 0.06);
-await writeIcon(512, "icon-512.png", 0.06);
-await writeIcon(512, "icon-maskable-512.png", 0.13);
+await writeIcon(192, "icon-192.png", 0.09);
+await writeIcon(512, "icon-512.png", 0.09);
+await writeIcon(512, "icon-maskable-512.png", 0.16);
