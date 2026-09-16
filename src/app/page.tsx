@@ -124,10 +124,10 @@ export default function Home() {
               <span className={styles.gate}>Gate</span>
             </h1>
             <p className={styles.tagline}>
-              Dumb Questions, Smart Questions:<br></br> Get the <b>Agreed</b> Upon answer nonetheless.
-              <br></br><br></br>From <b>real people</b> on every topic - Reddit &amp; X,
-              Hacker News and more. 
-              <br></br>No sponsored results. No AI summaries.
+            <br></br>
+              Any Question, Dumb or Smart<br></br> Get the <b>Agreed</b> Upon answer 
+              from <b>real people</b>
+              <br></br><br></br>No sponsored results. No AI summaries.
             </p>
 
             <SearchBar onSearch={runSearch} loading={loading} autoFocus />
